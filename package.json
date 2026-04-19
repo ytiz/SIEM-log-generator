@@ -1,0 +1,20 @@
+{
+  "name": "siem-log-generator",
+  "version": "1.0.0",
+  "type": "module", 
+  "scripts": {
+    "start": "ts-node src/index.ts"
+  },
+  "description": "",
+  "main": "index.js",
+
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.15.0",
+    "dotenv": "^17.4.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  }
+}
