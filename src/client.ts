@@ -1,53 +1,108 @@
 import axios from 'axios';
-import type { AxiosInstance } from 'axios'; 
-import * as dotenv from 'dotenv';
+import type { AxiosError, AxiosInstance } from 'axios';
 
-dotenv.config();
+import type { GeneratorConfig } from './config.js';
+import type { ISiemEvent } from './types.js';
 
 export class SiemClient {
   private api: AxiosInstance;
   private token: string | null = null;
+  private loginInFlight: Promise<void> | null = null;
 
-    constructor() {
-    const url = process.env.SIEM_BASE_URL;
-    
-    if (!url) {
-        throw new Error('SIEM_BASE_URL is not defined in .env file');
+  constructor(private readonly config: GeneratorConfig) {
+    this.api = axios.create({
+      baseURL: config.baseUrl,
+      timeout: 10_000,
+    });
+  }
+
+  private async authenticate(): Promise<void> {
+    const response = await this.api.post<{ accessToken?: string; access_token?: string }>(
+      '/auth/login',
+      {
+        email: this.config.email,
+        password: this.config.password,
+      },
+    );
+
+    const accessToken = response.data.accessToken ?? response.data.access_token;
+    if (!accessToken) {
+      throw new Error('Auth response does not include accessToken');
     }
 
-  this.api = axios.create({
-    baseURL: url, // Now TS knows this is definitely a string
-  });
-}
+    this.token = accessToken;
+    console.log('Authenticated');
+  }
 
-  // 1. Authenticate with your NestJS Backend
-  async login(): Promise<void> {
-    try {
-      const response = await this.api.post('/auth/login', {
-        username: process.env.SIEM_USERNAME,
-        password: process.env.SIEM_PASSWORD,
+  async login(force = false): Promise<void> {
+    if (force) {
+      this.token = null;
+    }
+
+    if (this.token) return;
+
+    if (!this.loginInFlight) {
+      this.loginInFlight = this.authenticate().finally(() => {
+        this.loginInFlight = null;
       });
-      
-      // Adjust 'access_token' based on what your actual auth service returns
-      this.token = response.data.access_token;
-      console.log('✅ Authenticated: JWT secured.');
-    } catch (error: any) {
-      console.error('❌ Auth Failed:', error.response?.data || error.message);
-      process.exit(1);
+    }
+
+    try {
+      await this.loginInFlight;
+    } catch (error: unknown) {
+      const detail = this.formatError(error);
+      throw new Error(`Authentication failed: ${detail}`);
     }
   }
 
-  // 2. Send the log to the /events/ingest endpoint
-  async emitLog(payload: any) {
-    if (!this.token) await this.login();
+  async emitLog(payload: ISiemEvent): Promise<void> {
+    await this.login();
 
     try {
       await this.api.post('/events/ingest', payload, {
         headers: { Authorization: `Bearer ${this.token}` },
       });
-      console.log(`🚀 Log Emitted: ${payload.eventType} - ${payload.severity}`);
-    } catch (error: any) {
-      console.error('❌ Ingestion Error:', error.response?.data || error.message);
+      console.log(`Log Emitted: ${payload.eventType} - ${payload.severity ?? 'n/a'}`);
+    } catch (error: unknown) {
+      const axiosError = error as AxiosError;
+
+      // Retry once after re-auth if token has expired.
+      if (axiosError.response?.status === 401) {
+        try {
+          await this.login(true);
+          await this.api.post('/events/ingest', payload, {
+            headers: { Authorization: `Bearer ${this.token}` },
+          });
+          console.log(`Log Emitted: ${payload.eventType} - ${payload.severity ?? 'n/a'}`);
+          return;
+        } catch (retryError: unknown) {
+          console.error('Ingestion Error after re-auth:', this.formatError(retryError));
+          return;
+        }
+      }
+
+      console.error('Ingestion Error:', this.formatError(error));
+    }
+  }
+
+  private formatError(error: unknown): string {
+    if (!axios.isAxiosError(error)) {
+      return error instanceof Error ? error.message : String(error);
+    }
+
+    const data = error.response?.data;
+    if (!data) {
+      return error.message;
+    }
+
+    if (typeof data === 'string') {
+      return data;
+    }
+
+    try {
+      return JSON.stringify(data);
+    } catch {
+      return error.message;
     }
   }
 }
