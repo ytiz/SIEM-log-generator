@@ -18,8 +18,9 @@ SIEM_PASSWORD= // password in siem env file
 ```
 
 Supported credential keys:
-- Preferred: `SIEM_USERNAME` and `SIEM_PASSWORD`
-- Also supported for backward compatibility: `SIMULATOR_EMAIL` and `SIMULATOR_PASSWORD`
+- Preferred: `SIEM_EMAIL` and `SIEM_PASSWORD`
+- Also supported: `SIEM_USERNAME` or `SIMULATOR_EMAIL`
+- Note: The value MUST be a valid email address as required by the backend.
 
 ## Install Dependencies
 ```bash
