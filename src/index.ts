@@ -3,7 +3,11 @@ import { CONFIG } from './config.js';
 import { SCENARIOS } from './scenarios.js';
 import type { ISiemEvent } from './types.js';
 
-console.log('Environment Debug:', { url: CONFIG.baseUrl, email: CONFIG.email });
+const STARTUP_DEBUG = process.env.STARTUP_DEBUG === 'true';
+
+if (STARTUP_DEBUG) {
+  console.log('Environment Debug:', { url: CONFIG.baseUrl });
+}
 
 const client = new SiemClient(CONFIG);
 const intervals: ReturnType<typeof setInterval>[] = [];
@@ -96,7 +100,14 @@ const start = async () => {
 
   intervals.push(bruteForceTimer, noiseTimer);
 
-  await runBruteForceScenario();
+  if (!bruteForceRunning) {
+    bruteForceRunning = true;
+    try {
+      await runBruteForceScenario();
+    } finally {
+      bruteForceRunning = false;
+    }
+  }
 };
 
 process.on('unhandledRejection', (reason) => {
