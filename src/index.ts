@@ -1,6 +1,7 @@
 import { SiemClient } from './client.js';
 import { CONFIG } from './config.js';
 import { SCENARIOS } from './scenarios.js';
+import { buildAnalyticsBatch } from './cloudtrail.js';
 import type { ISiemEvent } from './types.js';
 
 const STARTUP_DEBUG = process.env.STARTUP_DEBUG === 'true';
@@ -40,6 +41,39 @@ async function runBruteForceScenario(): Promise<void> {
   });
 }
 
+async function seedAnalytics(): Promise<void> {
+  if (CONFIG.skipAnalyticsSeed) {
+    console.log('Analytics seed skipped (SKIP_ANALYTICS_SEED=true).');
+    return;
+  }
+
+  console.log(`--- Seeding ${CONFIG.analyticsEvents} AWS CloudTrail analytics events ---`);
+  const pools = buildAnalyticsBatch(CONFIG.analyticsEvents);
+  let totalOk = 0, totalFail = 0;
+
+  for (const { name, batches } of pools) {
+    let ok = 0, fail = 0;
+
+    for (const batch of batches) {
+      try {
+        const result = await client.ingestCloudTrail(batch);
+        ok   += result.ingested;
+        fail += result.errors;
+      } catch (error: unknown) {
+        fail += batch.length;
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`  ${name} batch error: ${message}`);
+      }
+    }
+
+    console.log(`  ${name.padEnd(12)} ${ok} ingested, ${fail} failed`);
+    totalOk   += ok;
+    totalFail += fail;
+  }
+
+  console.log(`--- Analytics seed complete: ${totalOk} stored, ${totalFail} failed ---`);
+}
+
 async function emitSystemNoise(): Promise<void> {
   await client.emitLog({
     eventType: 'system_health',
@@ -75,6 +109,8 @@ const start = async () => {
   }
 
   registerSignalHandlers();
+
+  await seedAnalytics();
 
   let bruteForceRunning = false;
 

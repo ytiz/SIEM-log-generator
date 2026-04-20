@@ -85,6 +85,18 @@ export class SiemClient {
     }
   }
 
+  async ingestCloudTrail(events: Record<string, unknown>[]): Promise<{ ingested: number; errors: number }> {
+    const response = await this.api.post<{ ingested?: number; errors?: number }>(
+      '/aws/ingest/cloudtrail',
+      events,
+      { headers: { 'x-user-role': 'admin' } },
+    );
+    return {
+      ingested: response.data.ingested ?? events.length,
+      errors:   response.data.errors   ?? 0,
+    };
+  }
+
   private formatError(error: unknown): string {
     if (!axios.isAxiosError(error)) {
       return error instanceof Error ? error.message : String(error);
