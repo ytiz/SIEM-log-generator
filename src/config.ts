@@ -10,6 +10,8 @@ export interface GeneratorConfig {
   bruteForceIntervalMs: number;
   attemptDelayMs: number;
   noiseIntervalMs: number;
+  analyticsEvents: number;
+  skipAnalyticsSeed: boolean;
 }
 
 function getFirstDefined(keys: string[]): string | undefined {
@@ -59,4 +61,6 @@ export const CONFIG: GeneratorConfig = {
   bruteForceIntervalMs: getPositiveIntEnv(['BRUTE_FORCE_INTERVAL_MS'], 30_000),
   attemptDelayMs: getPositiveIntEnv(['BRUTE_FORCE_ATTEMPT_DELAY_MS'], 500),
   noiseIntervalMs: getPositiveIntEnv(['NOISE_INTERVAL_MS'], 10_000),
+  analyticsEvents: getPositiveIntEnv(['ANALYTICS_EVENTS'], 360),
+  skipAnalyticsSeed: process.env.SKIP_ANALYTICS_SEED === 'true',
 };
